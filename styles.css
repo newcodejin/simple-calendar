@@ -1,0 +1,160 @@
+/* Simple Calendar */
+
+/* Zero out the outer container (managed by Obsidian) and put all
+   padding on our own wrapper (.sc-root), so the calendar looks the
+   same no matter how the theme styles the view container. */
+.simple-calendar {
+  padding: 0;
+  --sc-cell-size: 34px;
+}
+
+.simple-calendar .sc-root {
+  padding: 12px 14px 14px;
+}
+
+/* ── Header ── */
+.simple-calendar .sc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap; /* let the buttons drop to the next line in narrow sidebars */
+  row-gap: 2px;
+  padding: 6px 4px 10px;
+}
+
+.simple-calendar .sc-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.simple-calendar .sc-month {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.simple-calendar .sc-year {
+  font-size: 1.15em;
+  color: var(--interactive-accent);
+}
+
+.simple-calendar .sc-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.simple-calendar .sc-nav-btn {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 2px 8px;
+  font-size: 1em;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.simple-calendar .sc-today-btn {
+  font-size: 0.75em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.simple-calendar .sc-nav-btn:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+/* ── Weekday header ── */
+.simple-calendar .sc-weekdays {
+  display: grid;
+  /* minmax(0,1fr) keeps long weekday names from widening the columns
+     and causing horizontal overflow in narrow sidebars or on mobile;
+     overflowing text is clipped instead. */
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 2px;
+}
+
+.simple-calendar .sc-weekday {
+  text-align: center;
+  font-size: 0.75em;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 4px 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ── Day grid ── */
+.simple-calendar .sc-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  row-gap: 2px;
+}
+
+.simple-calendar .sc-day {
+  min-height: var(--sc-cell-size);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px 0 2px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.simple-calendar .sc-day:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.simple-calendar .sc-day-num {
+  font-size: 0.85em;
+  color: var(--text-normal);
+  line-height: 1.2;
+}
+
+.simple-calendar .sc-outside .sc-day-num {
+  color: var(--text-faint);
+}
+
+/* Setting: show days outside this month at full brightness */
+.simple-calendar .sc-no-dim .sc-outside .sc-day-num {
+  color: var(--text-normal);
+}
+
+/* Setting: hide days outside this month (cells keep their place
+   so the remaining days stay aligned with the weekday columns) */
+.simple-calendar .sc-hide-outside .sc-outside {
+  visibility: hidden;
+}
+
+/* Today */
+.simple-calendar .sc-today .sc-day-num {
+  color: var(--interactive-accent);
+  font-weight: 700;
+}
+
+/* Marker — days that have a daily note */
+.simple-calendar .sc-dot-wrap {
+  min-height: calc(var(--sc-dot-size, 5px) + 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.simple-calendar .sc-dot {
+  width: var(--sc-dot-size, 5px);
+  height: var(--sc-dot-size, 5px);
+  border-radius: 50%;
+  background-color: var(--sc-dot-color, var(--interactive-accent));
+}
+
+/* Symbol used instead of the dot */
+.simple-calendar .sc-symbol {
+  font-size: calc(var(--sc-dot-size, 5px) + 6px);
+  line-height: 1;
+  color: var(--sc-dot-color, var(--interactive-accent));
+}

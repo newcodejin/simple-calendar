@@ -1,0 +1,9 @@
+{
+  "id": "simple-calendar",
+  "name": "Simple Calendar",
+  "description": "A simple calendar that shows a dot on days that have a daily note.",
+  "version": "1.0.0",
+  "author": "Simple Calendar contributors",
+  "isDesktopOnly": false,
+  "minAppVersion": "1.0.0"
+}
