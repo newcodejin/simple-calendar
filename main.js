@@ -14,6 +14,7 @@ const {
 } = require("obsidian");
 
 const VIEW_TYPE = "simple-calendar-view";
+const DAY_KEY = "YYYY-MM-DD"; // canonical per-day map key / compare format
 
 const DEFAULT_SETTINGS = {
   showDots: true, // mark days that have a daily note
@@ -70,7 +71,7 @@ function stripWeekdayTokens(format) {
 function getNotesByDay(app) {
   const { format, folder } = getDailyNoteSettings(app);
   const prefix = folder ? normalizePath(folder) + "/" : "";
-  const map = new Map(); // "YYYY-MM-DD" -> TFile
+  const map = new Map(); // DAY_KEY string -> TFile
 
   // Weekday names change with the locale, so drop weekday tokens from
   // parsing entirely; the date is determined by year/month/day tokens.
@@ -96,7 +97,7 @@ function getNotesByDay(app) {
     const unused = parsed.parsingFlags().unusedTokens || [];
     if (unused.some((t) => /[YMD]/.test(t))) continue;
 
-    const key = parsed.format("YYYY-MM-DD");
+    const key = parsed.format(DAY_KEY);
     if (!map.has(key)) map.set(key, f);
   }
   return map;
@@ -123,15 +124,15 @@ class SimpleCalendarView extends ItemView {
 
   async onOpen() {
     // Redraw the markers whenever notes are created, deleted, or renamed.
-    this.registerEvent(this.app.vault.on("create", () => this.render()));
-    this.registerEvent(this.app.vault.on("delete", () => this.render()));
-    this.registerEvent(this.app.vault.on("rename", () => this.render()));
+    for (const ev of ["create", "delete", "rename"]) {
+      this.registerEvent(this.app.vault.on(ev, () => this.render()));
+    }
 
     // Move the "today" highlight when the date rolls over at midnight.
-    this.todayKey = moment().format("YYYY-MM-DD");
+    this.todayKey = moment().format(DAY_KEY);
     this.registerInterval(
       window.setInterval(() => {
-        const now = moment().format("YYYY-MM-DD");
+        const now = moment().format(DAY_KEY);
         if (now !== this.todayKey) {
           this.todayKey = now;
           this.render();
@@ -150,8 +151,20 @@ class SimpleCalendarView extends ItemView {
     // Padding lives on our own wrapper, not on Obsidian's contentEl,
     // so themes that restyle the view container can't remove it.
     const el = container.createDiv({ cls: "sc-root" });
+    this.applyAppearance(el);
+    this.renderHeader(el);
 
-    // Apply appearance settings.
+    // Notes grouped by day for this render (click handlers use it too).
+    this.notesByDay = getNotesByDay(this.app);
+
+    // Date range: every week the displayed month touches.
+    const start = this.displayed.clone().startOf("month").startOf("week");
+    const end = this.displayed.clone().endOf("month").endOf("week");
+    this.renderWeekdays(el, start);
+    this.renderGrid(el, start, end);
+  }
+
+  applyAppearance(el) {
     const s = this.plugin.settings;
     el.toggleClass("sc-no-dim", s.outsideDays === "show");
     el.toggleClass("sc-hide-outside", s.outsideDays === "hide");
@@ -160,8 +173,10 @@ class SimpleCalendarView extends ItemView {
       "--sc-dot-color",
       s.useThemeDotColor ? "var(--interactive-accent)" : s.dotColor
     );
+  }
 
-    // ── Header: month/year + navigation buttons ──
+  // Header: month/year + navigation buttons.
+  renderHeader(el) {
     const header = el.createDiv({ cls: "sc-header" });
     const title = header.createDiv({ cls: "sc-title" });
     title.createSpan({ cls: "sc-month", text: this.displayed.format("MMMM") });
@@ -185,18 +200,12 @@ class SimpleCalendarView extends ItemView {
       this.displayed = this.displayed.clone().add(1, "month");
       this.render();
     });
+  }
 
-    // Notes grouped by day for this render (click handlers use it too).
-    this.notesByDay = getNotesByDay(this.app);
-
-    // ── Date range: every week the displayed month touches ──
-    const start = this.displayed.clone().startOf("month").startOf("week");
-    const end = this.displayed.clone().endOf("month").endOf("week");
-    const today = moment();
-
-    // Weekday header: use the names of the first week's seven days,
-    // so the locale (and its first day of week) is applied automatically.
-    // "ddd" gives Sun/Mon in English, short names in other languages.
+  // Weekday header: use the names of the first week's seven days,
+  // so the locale (and its first day of week) is applied automatically.
+  // "ddd" gives Sun/Mon in English, short names in other languages.
+  renderWeekdays(el, start) {
     const weekdaysEl = el.createDiv({ cls: "sc-weekdays" });
     for (let i = 0; i < 7; i++) {
       weekdaysEl.createDiv({
@@ -204,8 +213,11 @@ class SimpleCalendarView extends ItemView {
         text: start.clone().add(i, "day").format("ddd"),
       });
     }
+  }
 
-    // ── Day grid ──
+  renderGrid(el, start, end) {
+    const s = this.plugin.settings;
+    const today = moment();
     const grid = el.createDiv({ cls: "sc-grid" });
     const day = start.clone();
     while (day.isSameOrBefore(end, "day")) {
@@ -220,7 +232,7 @@ class SimpleCalendarView extends ItemView {
       // The core feature: mark days that have a daily note.
       if (s.showDots) {
         const dotWrap = cell.createDiv({ cls: "sc-dot-wrap" });
-        if (this.notesByDay.has(date.format("YYYY-MM-DD"))) {
+        if (this.notesByDay.has(date.format(DAY_KEY))) {
           cell.addClass("sc-has-note");
           if (s.marker === "symbol") {
             dotWrap.createDiv({ cls: "sc-symbol", text: s.symbol || "✓" });
@@ -238,43 +250,43 @@ class SimpleCalendarView extends ItemView {
   // Open the daily note for the clicked day.
   // If it doesn't exist, create it (using the template) and open it.
   async openDailyNote(date) {
-    let file =
-      this.notesByDay && this.notesByDay.get(date.format("YYYY-MM-DD"));
+    const file =
+      (this.notesByDay && this.notesByDay.get(date.format(DAY_KEY))) ||
+      (await this.createDailyNote(date));
+    await this.app.workspace.getLeaf(false).openFile(file);
+  }
 
-    if (!file) {
-      const { format, folder } = getDailyNoteSettings(this.app);
-      // If the format includes a time part, fill it with the current time.
-      const now = moment();
-      const stamp = date.clone().set({
-        hour: now.hour(),
-        minute: now.minute(),
-        second: now.second(),
-      });
-      const path = normalizePath(
-        (folder ? folder + "/" : "") + stamp.format(format) + ".md"
-      );
+  async createDailyNote(date) {
+    const { format, folder, template } = getDailyNoteSettings(this.app);
 
-      // Create the parent folder if it doesn't exist.
-      const dir = path.substring(0, path.lastIndexOf("/"));
-      if (dir && !this.app.vault.getAbstractFileByPath(dir)) {
-        await this.app.vault.createFolder(dir).catch(() => {});
-      }
+    // If the format includes a time part, fill it with the current time.
+    const now = moment();
+    const stamp = date.clone().set({
+      hour: now.hour(),
+      minute: now.minute(),
+      second: now.second(),
+    });
+    const path = normalizePath(
+      (folder ? folder + "/" : "") + stamp.format(format) + ".md"
+    );
 
-      // Start from the daily note template, if one is configured.
-      let content = "";
-      const { template } = getDailyNoteSettings(this.app);
-      if (template) {
-        const tPath = normalizePath(
-          template.endsWith(".md") ? template : template + ".md"
-        );
-        const tFile = this.app.vault.getAbstractFileByPath(tPath);
-        if (tFile instanceof TFile) content = await this.app.vault.read(tFile);
-      }
-
-      file = await this.app.vault.create(path, content);
+    // Create the parent folder if it doesn't exist.
+    const dir = path.substring(0, path.lastIndexOf("/"));
+    if (dir && !this.app.vault.getAbstractFileByPath(dir)) {
+      await this.app.vault.createFolder(dir).catch(() => {});
     }
 
-    await this.app.workspace.getLeaf(false).openFile(file);
+    // Start from the daily note template, if one is configured.
+    let content = "";
+    if (template) {
+      const tPath = normalizePath(
+        template.endsWith(".md") ? template : template + ".md"
+      );
+      const tFile = this.app.vault.getAbstractFileByPath(tPath);
+      if (tFile instanceof TFile) content = await this.app.vault.read(tFile);
+    }
+
+    return this.app.vault.create(path, content);
   }
 }
 
@@ -399,11 +411,27 @@ class SimpleCalendarPlugin extends Plugin {
 
     // Attach the view to the right sidebar once the layout is ready.
     this.app.workspace.onLayoutReady(() => {
-      if (this.app.workspace.getLeavesOfType(VIEW_TYPE).length === 0) {
+      // A leaf restored from the previous session can still be deferred
+      // here and race with this auto-attach, ending up with two
+      // calendars; keep the first leaf and close any extras.
+      const leaves = this.getCalendarLeaves();
+      for (const extra of leaves.slice(1)) extra.detach();
+      if (leaves.length === 0) {
         const leaf = this.app.workspace.getRightLeaf(false);
         if (leaf) leaf.setViewState({ type: VIEW_TYPE });
       }
     });
+  }
+
+  // Find calendar leaves by their saved view state instead of the live
+  // view object, so leaves that are still deferred at startup count too.
+  getCalendarLeaves() {
+    const leaves = [];
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const state = leaf.getViewState();
+      if (state && state.type === VIEW_TYPE) leaves.push(leaf);
+    });
+    return leaves;
   }
 
   async loadSettings() {
@@ -425,7 +453,9 @@ class SimpleCalendarPlugin extends Plugin {
   }
 
   async activateView() {
-    let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];
+    const leaves = this.getCalendarLeaves();
+    for (const extra of leaves.slice(1)) extra.detach();
+    let leaf = leaves[0];
     if (!leaf) {
       leaf = this.app.workspace.getRightLeaf(false);
       if (!leaf) return;
