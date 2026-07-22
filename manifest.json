@@ -2,7 +2,7 @@
   "id": "simple-calendar",
   "name": "Simple Calendar",
   "description": "A simple calendar that shows a dot on days that have a daily note.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "newcodejin",
   "authorUrl": "https://github.com/newcodejin",
   "isDesktopOnly": false,
