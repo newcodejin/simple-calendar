@@ -1,6 +1,6 @@
 # Simple Calendar
 
-A minimal calendar that marks the days you created a daily note.
+A minimal calendar you can lightly decorate.
 
 ## Options
 
